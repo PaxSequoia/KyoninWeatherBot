@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands, tasks
 import sqlite3
-import mysql-connector-python
+import mysql.connect
 import random
 import os
 from dotenv import load_dotenv
