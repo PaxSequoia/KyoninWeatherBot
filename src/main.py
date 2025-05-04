@@ -1,11 +1,12 @@
+import discord
+from discord.ext import commands, tasks
 import sqlite3
+import random
 import os
 from dotenv import load_dotenv
 import logging
 from datetime import datetime, timedelta, time, timezone
 import pytz
-import discord
-from discord.ext import commands, tasks
 
 # Load environment variables
 load_dotenv()
@@ -98,6 +99,10 @@ def generate_base_weather(season, location):
         weather_types += ["foggy", "misty"] * 2
 
     return random.choice(weather_types), random.randint(temp_range[0], temp_range[1])
+
+def generate_daily_forecast(season, location):
+    weather_type, temperature = generate_base_weather(season, location)
+    return f"{weather_type} and {temperature}°F"
 
 def db_execute(query, params=(), fetchone=False, fetchall=False):
     try:
