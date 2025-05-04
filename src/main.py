@@ -188,7 +188,12 @@ async def view_forecast(ctx, *, date: str = None):
     server_id = ctx.guild.id
 
     if date:
-        forecast_date = datetime.strptime(date, "%Y-%m-%d").strftime("%Y-%m-%d")
+        # Ensure the date format is YYYY-MM-DD
+        try:
+            forecast_date = datetime.strptime(date, "%Y-%m-%d").strftime("%Y-%m-%d")
+        except ValueError:
+            await ctx.send("❌ Please use the format YYYY-MM-DD for the date.")
+            return
     else:
         forecast_date = datetime.now().strftime("%Y-%m-%d")
 
@@ -197,6 +202,14 @@ async def view_forecast(ctx, *, date: str = None):
         '''SELECT forecast_text FROM weather_forecast WHERE server_id=? AND forecast_date=?''',
         (server_id, forecast_date), fetchone=True
     )
+
+    # Log the retrieved data
+    if result:
+        logging.info(f"Retrieved forecast for server {server_id} on {forecast_date}: {result[0]}")
+        await ctx.send(f"📅 **Forecast for {forecast_date}**\n{result[0]}")
+    else:
+        logging.warning(f"No forecast found for server {server_id} on {forecast_date}.")
+        await ctx.send(f"⚠️ No forecast available for {forecast_date}.")
 
     # Log the retrieved data
     if result:
