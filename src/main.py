@@ -174,7 +174,7 @@ async def view_weather_reader_role(ctx):
 async def ping(ctx):
     await ctx.send("🏓 Pong!")
 
-@tasks.loop(minutes=1)
+@tasks.loop(minutes=15)
 async def post_daily_weather():
     central = pytz.timezone("US/Central")
     now = datetime.now(central)
