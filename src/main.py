@@ -1,4 +1,3 @@
-
 import discord
 from discord.ext import commands, tasks
 import sqlite3
@@ -157,7 +156,6 @@ async def view_forecast(ctx):
     else:
         await ctx.send("⚠️ No forecast available for today.")
 
-
 @bot.command(name="set_weather_reader_role")
 async def set_weather_reader_role(ctx, role: discord.Role):
     if not is_admin(ctx):
@@ -178,16 +176,20 @@ async def ping(ctx):
 
 @tasks.loop(minutes=1)
 async def post_daily_weather():
-    now = datetime.utcnow()
-    
+    central = pytz.timezone("US/Central")
+    now = datetime.now(central)
+    logging.info(f"Current time: {now}")
+
     def get_next_midnight_central():
         """Calculate the next midnight in Central Time."""
-        central = pytz.timezone("US/Central")
         now = datetime.now(central)
         next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         return next_midnight
-    target_time = get_next_midnight_central().replace(second=0, microsecond=0)
-    if now.replace(second=0, microsecond=0) == target_time:
+
+    target_time = get_next_midnight_central()
+    logging.info(f"Target time: {target_time}")
+
+    if now.replace(second=0, microsecond=0) == target_time.replace(second=0, microsecond=0):
         for guild in bot.guilds:
             result = db_execute(
                 '''SELECT weather_channel_id FROM server_settings WHERE server_id=?''',
@@ -215,7 +217,6 @@ async def on_ready():
     logging.info(f'Logged in as {bot.user.name}')
     if not post_daily_weather.is_running():
         post_daily_weather.start()
-
 
 if TOKEN:
     bot.run(TOKEN)
