@@ -7,6 +7,7 @@ import os
 from dotenv import load_dotenv
 import logging
 from datetime import datetime, timedelta, time, timezone
+import pytz
 
 # Load environment variables
 load_dotenv()
@@ -143,6 +144,20 @@ async def generate_forecast(ctx):
         return
     await ctx.send("📅 Forecast generated.")  # Placeholder
 
+@bot.command(name="view_forecast")
+async def view_forecast(ctx):
+    """View the forecast for today."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    result = db_execute(
+        '''SELECT forecast_text FROM weather_forecast WHERE server_id=? AND forecast_date=?''',
+        (ctx.guild.id, today), fetchone=True
+    )
+    if result:
+        await ctx.send(f"📅 **Today's Forecast**\n{result[0]}")
+    else:
+        await ctx.send("⚠️ No forecast available for today.")
+
+
 @bot.command(name="set_weather_reader_role")
 async def set_weather_reader_role(ctx, role: discord.Role):
     if not is_admin(ctx):
@@ -161,10 +176,46 @@ async def view_weather_reader_role(ctx):
 async def ping(ctx):
     await ctx.send("🏓 Pong!")
 
+@tasks.loop(minutes=1)
+async def post_daily_weather():
+    now = datetime.utcnow()
+    
+    def get_next_midnight_central():
+        """Calculate the next midnight in Central Time."""
+        central = pytz.timezone("US/Central")
+        now = datetime.now(central)
+        next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        return next_midnight
+    target_time = get_next_midnight_central().replace(second=0, microsecond=0)
+    if now.replace(second=0, microsecond=0) == target_time:
+        for guild in bot.guilds:
+            result = db_execute(
+                '''SELECT weather_channel_id FROM server_settings WHERE server_id=?''',
+                (guild.id,), fetchone=True
+            )
+            if not result:
+                continue
+            channel = bot.get_channel(result[0])
+            if channel:
+                today = datetime.now().strftime("%A, %B %d")
+                forecast = db_execute(
+                    '''SELECT forecast_text FROM weather_forecast WHERE server_id=? AND forecast_date=date("now", "localtime")''',
+                    (guild.id,), fetchone=True
+                )
+                try:
+                    if forecast:
+                        await channel.send(f"📅 **Weather for {today}**\n{forecast[0]}")
+                    else:
+                        await channel.send(f"📅 **Weather for {today}**\n⚠️ No forecast available.")
+                except Exception as e:
+                    logging.error(f"Failed to post forecast to {guild.name}: {e}")
+
 @bot.event
 async def on_ready():
     logging.info(f'Logged in as {bot.user.name}')
-    # post_daily_weather.start()  # Placeholder
+    if not post_daily_weather.is_running():
+        post_daily_weather.start()
+
 
 if TOKEN:
     bot.run(TOKEN)
