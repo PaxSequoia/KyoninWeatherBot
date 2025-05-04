@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands, tasks
 import sqlite3
+import mysql-connector-python
 import random
 import os
 from dotenv import load_dotenv
@@ -13,6 +14,12 @@ load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 if not TOKEN:
     raise ValueError("❌ DISCORD_TOKEN not found. Please set it in your .env file.")
+MYSQL_HOST = os.getenv('DATABASE_HOST')
+MYSQL_PORT = os.getenv('DATABASE_PORT')
+MYSQL_USER = os.getenv('DATABASE_USER')
+MYSQL_PASSWORD = os.getenv('DATABASE_PASSWORD')
+MYSQL_DATABASE = os.getenv('DATABSE_NAME')
+
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
