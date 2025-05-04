@@ -1,12 +1,11 @@
-import discord
-from discord.ext import commands, tasks
 import sqlite3
-import random
 import os
 from dotenv import load_dotenv
 import logging
 from datetime import datetime, timedelta, time, timezone
 import pytz
+import discord
+from discord.ext import commands, tasks
 
 # Load environment variables
 load_dotenv()
@@ -114,6 +113,23 @@ def db_execute(query, params=(), fetchone=False, fetchall=False):
         logging.error(f"Database error: {e}")
         return None
 
+def initialize_database():
+    with sqlite3.connect('weather_bot.db') as conn:
+        c = conn.cursor()
+        # Create server_settings table
+        c.execute('''CREATE TABLE IF NOT EXISTS server_settings (
+                    server_id INTEGER PRIMARY KEY,
+                    weather_channel_id INTEGER)''')
+
+        # Create weather_forecast table
+        c.execute('''CREATE TABLE IF NOT EXISTS weather_forecast (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    server_id INTEGER NOT NULL,
+                    forecast_date TEXT NOT NULL,
+                    forecast_text TEXT NOT NULL)''')
+
+        conn.commit()
+
 def is_admin(ctx):
     return ctx.author.guild_permissions.administrator or any(role.name.lower() == "admin" for role in ctx.author.roles)
 
@@ -141,20 +157,49 @@ async def generate_forecast(ctx):
     if not is_admin(ctx):
         await ctx.send("❌ You do not have permission to use this command.")
         return
-    await ctx.send("📅 Forecast generated.")  # Placeholder
+
+    server_id = ctx.guild.id
+    current_date = datetime.now()
+    season = "spring"  # You can determine the season based on the current date
+
+    for day in range(1, 8):  # Generate forecast for the next 7 days
+        forecast_date = (current_date + timedelta(days=day)).strftime("%Y-%m-%d")
+        forecast_text = generate_daily_forecast(season, "coastal")  # You can change "coastal" to any location
+
+        # Insert the forecast into the database
+        db_execute(
+            '''INSERT INTO weather_forecast (server_id, forecast_date, forecast_text) VALUES (?, ?, ?)''',
+            (server_id, forecast_date, forecast_text)
+        )
+
+        # Log the inserted data
+        logging.info(f"Generated forecast for server {server_id} on {forecast_date}: {forecast_text}")
+
+    await ctx.send("📅 One-week forecast generated.")
 
 @bot.command(name="view_forecast")
-async def view_forecast(ctx):
-    """View the forecast for today."""
-    today = datetime.now().strftime("%Y-%m-%d")
+async def view_forecast(ctx, *, date: str = None):
+    """View the forecast for a specific date."""
+    server_id = ctx.guild.id
+
+    if date:
+        forecast_date = datetime.strptime(date, "%Y-%m-%d").strftime("%Y-%m-%d")
+    else:
+        forecast_date = datetime.now().strftime("%Y-%m-%d")
+
+    # Retrieve the forecast from the database
     result = db_execute(
         '''SELECT forecast_text FROM weather_forecast WHERE server_id=? AND forecast_date=?''',
-        (ctx.guild.id, today), fetchone=True
+        (server_id, forecast_date), fetchone=True
     )
+
+    # Log the retrieved data
     if result:
-        await ctx.send(f"📅 **Today's Forecast**\n{result[0]}")
+        logging.info(f"Retrieved forecast for server {server_id} on {forecast_date}: {result[0]}")
+        await ctx.send(f"📅 **Forecast for {forecast_date}**\n{result[0]}")
     else:
-        await ctx.send("⚠️ No forecast available for today.")
+        logging.warning(f"No forecast found for server {server_id} on {forecast_date}.")
+        await ctx.send(f"⚠️ No forecast available for {forecast_date}.")
 
 @bot.command(name="set_weather_reader_role")
 async def set_weather_reader_role(ctx, role: discord.Role):
@@ -215,6 +260,7 @@ async def post_daily_weather():
 @bot.event
 async def on_ready():
     logging.info(f'Logged in as {bot.user.name}')
+    initialize_database()
     if not post_daily_weather.is_running():
         post_daily_weather.start()
 
