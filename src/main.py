@@ -108,6 +108,7 @@ def db_execute(query, params=(), fetchone=False, fetchall=False):
     try:
         with sqlite3.connect('weather_bot.db') as conn:
             c = conn.cursor()
+            logging.info(f"Executing query: {query} with params: {params}")
             c.execute(query, params)
             if fetchone:
                 return c.fetchone()
@@ -134,6 +135,7 @@ def initialize_database():
                     forecast_text TEXT NOT NULL)''')
 
         conn.commit()
+    logging.info("Database initialized successfully.")
 
 def is_admin(ctx):
     return ctx.author.guild_permissions.administrator or any(role.name.lower() == "admin" for role in ctx.author.roles)
@@ -202,14 +204,6 @@ async def view_forecast(ctx, *, date: str = None):
         '''SELECT forecast_text FROM weather_forecast WHERE server_id=? AND forecast_date=?''',
         (server_id, forecast_date), fetchone=True
     )
-
-    # Log the retrieved data
-    if result:
-        logging.info(f"Retrieved forecast for server {server_id} on {forecast_date}: {result[0]}")
-        await ctx.send(f"📅 **Forecast for {forecast_date}**\n{result[0]}")
-    else:
-        logging.warning(f"No forecast found for server {server_id} on {forecast_date}.")
-        await ctx.send(f"⚠️ No forecast available for {forecast_date}.")
 
     # Log the retrieved data
     if result:
