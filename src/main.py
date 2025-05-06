@@ -31,16 +31,8 @@ logger = logging.getLogger(__name__)
 # Initialize bot intents
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Database connection
-def get_mysql_connection():
-    return mysql.connector.connect(
-        host=MYSQL_HOST,
-        user=MYSQL_USER,
-        password=MYSQL_PASSWORD,
-        database=MYSQL_DATABASE
-    )
+# Custom help command class
 class CustomHelpCommand(commands.HelpCommand):
     def __init__(self):
         super().__init__()
@@ -79,7 +71,7 @@ class CustomHelpCommand(commands.HelpCommand):
 
         await self.get_destination().send(embed=embed)
 
-# Initialize bot with custom help
+# Initialize bot with custom help - do this only once
 bot = commands.Bot(
     command_prefix="!",
     intents=intents,
@@ -124,8 +116,7 @@ def is_dst():
 def get_timezone_offset():
     return timedelta(hours=-5) if is_dst() else timedelta(hours=-6)
 
-# Button and View classes
-class MainMenuView(View):
+# Button and View classesclass MainMenuView(View):
     def __init__(self, ctx):
         super().__init__(timeout=120)
         self.ctx = ctx
@@ -133,15 +124,37 @@ class MainMenuView(View):
 
     @button(label="📖 Read Weather", style=discord.ButtonStyle.primary)
     async def read_weather_btn(self, interaction: discord.Interaction, button: Button):
-        await read_weather(interaction)
+        # Create a context-like object with needed properties
+        class CtxLike:
+            def __init__(self, interaction):
+                self.guild = interaction.guild
+                self.author = interaction.user
+                self.send = interaction.response.send_message
+                
+        ctx_like = CtxLike(interaction)
+        await read_weather(ctx_like)
 
     @button(label="📅 7-Day Forecast", style=discord.ButtonStyle.primary)
     async def view_forecast_btn(self, interaction: discord.Interaction, button: Button):
-        await view_forecast(interaction)
+        class CtxLike:
+            def __init__(self, interaction):
+                self.guild = interaction.guild
+                self.author = interaction.user
+                self.send = interaction.response.send_message
+                
+        ctx_like = CtxLike(interaction)
+        await view_forecast(ctx_like)
 
     @button(label="🔮 Generate Forecast", style=discord.ButtonStyle.secondary)
     async def generate_forecast_btn(self, interaction: discord.Interaction, button: Button):
-        await generate_forecast(interaction)
+        class CtxLike:
+            def __init__(self, interaction):
+                self.guild = interaction.guild
+                self.author = interaction.user
+                self.send = interaction.response.send_message
+                
+        ctx_like = CtxLike(interaction)
+        await generate_forecast(ctx_like)
 
     @button(label="📌 Set Weather Channel", style=discord.ButtonStyle.success)
     async def set_channel_btn(self, interaction: discord.Interaction, button: Button):
@@ -149,11 +162,19 @@ class MainMenuView(View):
 
     @button(label="📺 Show Weather Channel", style=discord.ButtonStyle.success)
     async def show_channel_btn(self, interaction: discord.Interaction, button: Button):
-        await show_weather_channel(interaction)
+        class CtxLike:
+            def __init__(self, interaction):
+                self.guild = interaction.guild
+                self.author = interaction.user
+                self.send = interaction.response.send_message
+                
+        ctx_like = CtxLike(interaction)
+        await show_weather_channel(ctx_like)
 
     @button(label="🏓 Ping", style=discord.ButtonStyle.secondary)
     async def ping_btn(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_message("🏓 Pong!", ephemeral=True)
+
 
 # Generate base weather
 def generate_base_weather(season, location):
@@ -195,7 +216,7 @@ def is_admin(ctx):
     return ctx.author.guild_permissions.administrator or any(role.name.lower() == "admin" for role in ctx.author.roles)
 
 # Help commands
-bot.command(name="menu") #Display menu buttons
+@bot.command(name="menu") #Display menu buttons
 async def menu(ctx):
     """Show interactive weather system menu."""
     view = MainMenuView(ctx)
