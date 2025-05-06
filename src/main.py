@@ -195,10 +195,10 @@ def is_admin(ctx):
     return ctx.author.guild_permissions.administrator or any(role.name.lower() == "admin" for role in ctx.author.roles)
 
 # Help commands
-@bot.command(name="menu") #Display menu buttons
+bot.command(name="menu") #Display menu buttons
 async def menu(ctx):
     """Show interactive weather system menu."""
-    view = MainMenuView(server_id=ctx.guild.id)
+    view = MainMenuView(ctx)
     await ctx.send("🧭 **Kyonin Weather System Menu**", view=view)
 
 @bot.command(name="set_weather_channel")
