@@ -14,14 +14,13 @@ load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 if not TOKEN:
     raise ValueError("❌ DISCORD_TOKEN not found. Please set it in your .env file.")
-GUILD_ID = int(os.getenv("GUILD_ID"))
-CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
 MYSQL_HOST = os.getenv('DATABASE_HOST')
 MYSQL_PORT = os.getenv('DATABASE_PORT')
 MYSQL_USER = os.getenv('DATABASE_USER')
 MYSQL_PASSWORD = os.getenv('DATABASE_PASSWORD')
 MYSQL_DATABASE = os.getenv('DATABASE_NAME')
-
+if not all([MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE]):
+    raise ValueError("❌ Database credentials not found. Please set them in your .env file.")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
