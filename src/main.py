@@ -57,7 +57,7 @@ class CustomHelpCommand(commands.HelpCommand):
             "🗕️ Forecast Control": ["generate_forecast", "view_forecast"],
             "👥 Role Settings": ["set_weather_reader_role", "view_weather_reader_role"],
             "👁️ Preview": ["read_weather"],
-            "⚙️ Utility": ["ping"]
+            "⚙️ Utility": ["ping"], [menu]
         }
 
         for category, command_names in categories.items():
@@ -90,7 +90,7 @@ SEASONS = {
     "spring": {"temp_range": (50, 70), "weather_types": ["sunny", "rainy", "cloudy", "misty"]},
     "summer": {"temp_range": (75, 95), "weather_types": ["sunny", "stormy", "humid", "foggy"]},
     "autumn": {"temp_range": (45, 65), "weather_types": ["cloudy", "windy", "rainy", "misty"]},
-    "winter": {"temp_range": (20, 40), "weather_types": ["snowy", "cold", "cloudy", "foggy"]}
+    "winter": {"temp_range": (30, 50), "weather_types": ["snowy", "cold", "windy", "foggy"]}
 }
 
 # Initialize SQLite database
@@ -162,6 +162,12 @@ def is_admin(ctx):
     return ctx.author.guild_permissions.administrator or any(role.name.lower() == "admin" for role in ctx.author.roles)
 
 # Help commands
+@bot.command(name="menu") #Display menu buttons
+async def menu(ctx):
+    """Show interactive weather system menu."""
+    view = MainMenuView(server_id=ctx.guild.id)
+    await ctx.send("🧭 **Kyonin Weather System Menu**", view=view)
+
 @bot.command(name="set_weather_channel")
 async def set_weather_channel(ctx, channel: discord.TextChannel):
     if not is_admin(ctx):
@@ -206,30 +212,58 @@ async def generate_forecast(ctx):
 
     await ctx.send("📅 One-week forecast generated.")
 
+def format_golarion_date(date_obj: datetime) -> str:
+    """Return a lore-friendly Golarion date string like 'Oathday, Pharast 10'."""
+    golarion_days = [
+        "Sunday", "Moonday", "Toilday", "Wealday", "Oathday", "Fireday", "Starday"
+    ]
+    golarion_months = [
+        "Abadius", "Calistril", "Pharast", "Gozran", "Desnus", "Sarenith",
+        "Erastus", "Arodus", "Rova", "Lamashan", "Neth", "Kuthona"
+    ]
+    weekday = golarion_days[date_obj.weekday()]
+    month = golarion_months[date_obj.month - 1]
+    return f"{weekday}, {month} {date_obj.day}"
+
+from datetime import timedelta
+
 @bot.command(name="view_forecast")
 async def view_forecast(ctx, *, date: str = None):
-    """View the forecast for a specific date."""
+    """View the 7-day forecast starting from today or a specific date."""
     server_id = ctx.guild.id
 
     if date:
-        # Ensure the date format is YYYY-MM-DD
         try:
-            forecast_date = datetime.strptime(date, "%Y-%m-%d").strftime("%Y-%m-%d")
+            start_date = datetime.strptime(date, "%Y-%m-%d")
         except ValueError:
             await ctx.send("❌ Please use the format YYYY-MM-DD for the date.")
             return
     else:
-        forecast_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = datetime.now()
 
-    # Retrieve the forecast from the database
-    result = db_execute(
-        '''SELECT forecast_text FROM weather_forecast WHERE server_id=? AND forecast_date=?''',
-        (server_id, forecast_date), fetchone=True
-    )
+    date_list = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
+
+    placeholders = ",".join("?" for _ in date_list)
+    query = f'''
+        SELECT forecast_date, forecast_text
+        FROM weather_forecast
+        WHERE server_id=? AND forecast_date IN ({placeholders})
+        ORDER BY forecast_date
+    '''
+    result = db_execute(query, (server_id, *date_list), fetchall=True)
+
+    if result:
+        forecast_lines = [
+            f"📅 **{format_golarion_date(datetime.strptime(row[0], '%Y-%m-%d'))}**\n{row[1]}"
+            for row in result
+        ]
+        await ctx.send(f"🌤 **7-Day Forecast**:\n\n" + "\n\n".join(forecast_lines))
+    else:
+        await ctx.send("⚠️ No forecast data found for the upcoming 7 days.")
 
     # Log the retrieved data
     if result:
-        logging.info(f"Retrieved forecast for server {server_id} on {forecast_date}: {result[0]}")
+        logging.info(f"Retrieved forecast for server {server_id} with results: {result[0]}")
         await ctx.send(f"📅 **Forecast for {forecast_date}**\n{result[0]}")
     else:
         logging.warning(f"No forecast found for server {server_id} on {forecast_date}.")
@@ -248,6 +282,31 @@ async def view_weather_reader_role(ctx):
         await ctx.send("❌ You do not have permission to use this command.")
         return
     await ctx.send("👥 Current reader role: Admin")  # Placeholder
+
+# Allow weather reading by anyone with the weather_reader_role - Druids and Rangers
+@bot.command(name="read_weather")
+async def read_weather(ctx):
+    """Read today's and tomorrow's weather."""
+    server_id = ctx.guild.id
+    now = datetime.now()
+    date_list = [(now + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(2)]
+
+    query = '''
+        SELECT forecast_date, forecast_text
+        FROM weather_forecast
+        WHERE server_id=? AND forecast_date IN (?, ?)
+        ORDER BY forecast_date
+    '''
+    result = db_execute(query, (server_id, *date_list), fetchall=True)
+
+    if result:
+        forecast_lines = [
+            f"📅 **{format_golarion_date(datetime.strptime(row[0], '%Y-%m-%d'))}**\n{row[1]}"
+            for row in result
+        ]
+        await ctx.send(f"🌦️ **Weather Update**:\n\n" + "\n\n".join(forecast_lines))
+    else:
+        await ctx.send("⚠️ No current forecast available.")
 
 @bot.command(name="ping")
 async def ping(ctx):
