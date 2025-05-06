@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-Private%20Use-blue.svg)](LICENSE)
 [![Discord Bot](https://img.shields.io/badge/Discord-Weather%20Bot-7289DA.svg)](https://discord.com/)
 
-🌦️ A dynamic, lore-accurate weather system for Pathfinder's Kingdom of Kyonin, built for Discord servers.
+🌦️ A dynamic, lore-accurate weather system for Pathfinder's Kingdom of Kyonin, built for Discord servers. First deployed on the [Dragon's Lair Living World server](https://discord.gg/TgaBZAf)
 
 ## Features
 
