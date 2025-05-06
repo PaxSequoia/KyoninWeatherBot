@@ -159,7 +159,7 @@ def db_execute(query, params=(), fetchone=False, fetchall=False):
         return None
 
 def is_admin(ctx):
-    return ctx.author.guild_permissions.administrator or any(role.name.lower() == "Admin" for role in ctx.author.roles)
+    return ctx.author.guild_permissions.administrator or any(role.name.lower() == "admin" for role in ctx.author.roles)
 
 # Help commands
 @bot.command(name="set_weather_channel")
