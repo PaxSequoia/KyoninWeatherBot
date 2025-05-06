@@ -1,6 +1,7 @@
 import discord 
 from discord.ext import commands, tasks
-import discord.ui import View, Button, button
+import discord.ui 
+from discord.ui import View, Button, button
 import sqlite3
 import mysql.connector
 import random
