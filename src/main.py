@@ -51,7 +51,7 @@ class CustomHelpCommand(commands.HelpCommand):
             "🗕️ Forecast Control": ["generate_forecast", "view_forecast"],
             "👥 Role Settings": ["set_weather_reader_role", "view_weather_reader_role"],
             "👁️ Preview": ["read_weather"],
-            "⚙️ Utility": ["ping", "menu"]
+            "⚙️ Utility": ["ping", "menu", "cleanup_database"]
         }
 
         for category, command_names in categories.items():
@@ -176,7 +176,6 @@ class MainMenuView(View):
     async def ping_btn(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_message("🏓 Pong!", ephemeral=True)
 
-
 # Generate base weather
 def generate_base_weather(season, location):
     config = SEASONS[season]
@@ -280,8 +279,6 @@ def format_golarion_date(date_obj: datetime) -> str:
     month = golarion_months[date_obj.month - 1]
     return f"{weekday}, {month} {date_obj.day}"
 
-from datetime import timedelta
-
 @bot.command(name="view_forecast")
 async def view_forecast(ctx, *, date: str = None):
     """View the 7-day forecast starting from today or a specific date."""
@@ -359,6 +356,44 @@ async def read_weather(ctx):
     else:
         await ctx.send("⚠️ No current forecast available for today or tomorrow.")
         logging.warning(f"No forecast found for server {server_id} for today/tomorrow.")
+
+@bot.command(name="cleanup_database")
+async def cleanup_database(ctx):
+    """Admin command to clean up duplicate forecast entries."""
+    if not is_admin(ctx):
+        await ctx.send("❌ You do not have permission to use this command.")
+        return
+        
+    server_id = ctx.guild.id
+    
+    # Get count before cleanup
+    count_before = db_execute(
+        '''SELECT COUNT(*) FROM weather_forecast WHERE server_id=?''', 
+        (server_id,), fetchone=True
+    )[0]
+    
+    # Delete duplicate entries, keeping only one entry per server_id and forecast_date
+    cleanup_query = '''
+    DELETE FROM weather_forecast 
+    WHERE id NOT IN (
+        SELECT MIN(id) 
+        FROM weather_forecast 
+        WHERE server_id = ?
+        GROUP BY server_id, forecast_date
+    ) AND server_id = ?
+    '''
+    
+    db_execute(cleanup_query, (server_id, server_id))
+    
+    # Get count after cleanup
+    count_after = db_execute(
+        '''SELECT COUNT(*) FROM weather_forecast WHERE server_id=?''', 
+        (server_id,), fetchone=True
+    )[0]
+    
+    removed = count_before - count_after
+    await ctx.send(f"🧹 Database cleanup complete. Removed {removed} duplicate entries.")
+    logging.info(f"Database cleanup for server {server_id}: removed {removed} duplicates")
 
 @bot.command(name="ping") # Simple ping command to ensure bot is responsive.
 async def ping(ctx):
