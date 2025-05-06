@@ -57,7 +57,7 @@ class CustomHelpCommand(commands.HelpCommand):
             "🗕️ Forecast Control": ["generate_forecast", "view_forecast"],
             "👥 Role Settings": ["set_weather_reader_role", "view_weather_reader_role"],
             "👁️ Preview": ["read_weather"],
-            "⚙️ Utility": ["ping"], [menu]
+            "⚙️ Utility": ["ping"], ["menu"]
         }
 
         for category, command_names in categories.items():
