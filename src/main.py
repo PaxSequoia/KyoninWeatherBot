@@ -116,7 +116,8 @@ def is_dst():
 def get_timezone_offset():
     return timedelta(hours=-5) if is_dst() else timedelta(hours=-6)
 
-# Button and View classesclass MainMenuView(View):
+# Button and View classes
+class MainMenuView(View):
     def __init__(self, ctx):
         super().__init__(timeout=120)
         self.ctx = ctx
