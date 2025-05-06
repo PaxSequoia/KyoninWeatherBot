@@ -122,6 +122,37 @@ def is_dst():
 def get_timezone_offset():
     return timedelta(hours=-5) if is_dst() else timedelta(hours=-6)
 
+# Button and View classes
+class MainMenuView(View):
+    def __init__(self, ctx):
+        super().__init__(timeout=120)
+        self.ctx = ctx
+        self.server_id = ctx.guild.id
+
+    @button(label="📖 Read Weather", style=discord.ButtonStyle.primary)
+    async def read_weather_btn(self, interaction: discord.Interaction, button: Button):
+        await read_weather(interaction)
+
+    @button(label="📅 7-Day Forecast", style=discord.ButtonStyle.primary)
+    async def view_forecast_btn(self, interaction: discord.Interaction, button: Button):
+        await view_forecast(interaction)
+
+    @button(label="🔮 Generate Forecast", style=discord.ButtonStyle.secondary)
+    async def generate_forecast_btn(self, interaction: discord.Interaction, button: Button):
+        await generate_forecast(interaction)
+
+    @button(label="📌 Set Weather Channel", style=discord.ButtonStyle.success)
+    async def set_channel_btn(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_message("Use `!set_weather_channel #channel` directly.", ephemeral=True)
+
+    @button(label="📺 Show Weather Channel", style=discord.ButtonStyle.success)
+    async def show_channel_btn(self, interaction: discord.Interaction, button: Button):
+        await show_weather_channel(interaction)
+
+    @button(label="🏓 Ping", style=discord.ButtonStyle.secondary)
+    async def ping_btn(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_message("🏓 Pong!", ephemeral=True)
+
 # Generate base weather
 def generate_base_weather(season, location):
     config = SEASONS[season]
