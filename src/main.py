@@ -1,33 +1,45 @@
-import discord
-from discord.ext import commands, tasks
+import discord 
+from discord.ext import commands, tasks 
 import sqlite3
-import mysql.connect
+import mysql.connector
 import random
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv 
 import logging
 from datetime import datetime, timedelta, time, timezone
-import pytz
+import pytz 
 
 # Load environment variables
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 if not TOKEN:
     raise ValueError("❌ DISCORD_TOKEN not found. Please set it in your .env file.")
+GUILD_ID = int(os.getenv("GUILD_ID"))
+CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
 MYSQL_HOST = os.getenv('DATABASE_HOST')
 MYSQL_PORT = os.getenv('DATABASE_PORT')
 MYSQL_USER = os.getenv('DATABASE_USER')
 MYSQL_PASSWORD = os.getenv('DATABASE_PASSWORD')
-MYSQL_DATABASE = os.getenv('DATABSE_NAME')
+MYSQL_DATABASE = os.getenv('DATABASE_NAME')
 
 
-# Set up logging
+# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Initialize bot intents
 intents = discord.Intents.default()
 intents.message_content = True
+bot = commands.Bot(command_prefix="!", intents=intents)
 
+# Database connection
+def get_mysql_connection():
+    return mysql.connector.connect(
+        host=MYSQL_HOST,
+        user=MYSQL_USER,
+        password=MYSQL_PASSWORD,
+        database=MYSQL_DATABASE
+    )
 class CustomHelpCommand(commands.HelpCommand):
     def __init__(self):
         super().__init__()
@@ -82,7 +94,26 @@ SEASONS = {
     "winter": {"temp_range": (20, 40), "weather_types": ["snowy", "cold", "cloudy", "foggy"]}
 }
 
-# Helper functions
+# Initialize SQLite database
+def initialize_database():
+    with sqlite3.connect('weather_bot.db') as conn:
+        c = conn.cursor()
+        # Create server_settings table
+        c.execute('''CREATE TABLE IF NOT EXISTS server_settings (
+                    server_id INTEGER PRIMARY KEY,
+                    weather_channel_id INTEGER)''')
+
+        # Create weather_forecast table
+        c.execute('''CREATE TABLE IF NOT EXISTS weather_forecast (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    server_id INTEGER NOT NULL,
+                    forecast_date TEXT NOT NULL,
+                    forecast_text TEXT NOT NULL)''')
+
+        conn.commit()
+    logging.info("Database initialized successfully.")
+
+# Set the timezone to US/Central
 def is_dst():
     today = datetime.now()
     dst_start = datetime(today.year, 3, 8) + timedelta(days=(6 - datetime(today.year, 3, 8).weekday()))
@@ -92,6 +123,7 @@ def is_dst():
 def get_timezone_offset():
     return timedelta(hours=-5) if is_dst() else timedelta(hours=-6)
 
+# Generate base weather
 def generate_base_weather(season, location):
     config = SEASONS[season]
     temp_range = config["temp_range"]
@@ -107,6 +139,7 @@ def generate_base_weather(season, location):
 
     return random.choice(weather_types), random.randint(temp_range[0], temp_range[1])
 
+# Generate daily forecast
 def generate_daily_forecast(season, location):
     weather_type, temperature = generate_base_weather(season, location)
     return f"{weather_type} and {temperature}°F"
@@ -126,27 +159,10 @@ def db_execute(query, params=(), fetchone=False, fetchall=False):
         logging.error(f"Database error: {e}")
         return None
 
-def initialize_database():
-    with sqlite3.connect('weather_bot.db') as conn:
-        c = conn.cursor()
-        # Create server_settings table
-        c.execute('''CREATE TABLE IF NOT EXISTS server_settings (
-                    server_id INTEGER PRIMARY KEY,
-                    weather_channel_id INTEGER)''')
-
-        # Create weather_forecast table
-        c.execute('''CREATE TABLE IF NOT EXISTS weather_forecast (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    server_id INTEGER NOT NULL,
-                    forecast_date TEXT NOT NULL,
-                    forecast_text TEXT NOT NULL)''')
-
-        conn.commit()
-    logging.info("Database initialized successfully.")
-
 def is_admin(ctx):
-    return ctx.author.guild_permissions.administrator or any(role.name.lower() == "admin" for role in ctx.author.roles)
+    return ctx.author.guild_permissions.administrator or any(role.name.lower() == "Admin" for role in ctx.author.roles)
 
+# Help commands
 @bot.command(name="set_weather_channel")
 async def set_weather_channel(ctx, channel: discord.TextChannel):
     if not is_admin(ctx):
@@ -238,6 +254,7 @@ async def view_weather_reader_role(ctx):
 async def ping(ctx):
     await ctx.send("🏓 Pong!")
 
+# Daily weather posting task
 @tasks.loop(minutes=15)
 async def post_daily_weather():
     central = pytz.timezone("US/Central")
