@@ -329,42 +329,35 @@ async def view_weather_reader_role(ctx):
         return
     await ctx.send("👥 Current reader role: Admin")  # Placeholder
 
-# Allow weather reading by anyone with the weather_reader_role - Druids and Rangers
-@bot.command(name="view_forecast")
-async def view_forecast(ctx, *, date: str = None):
-    """View the 7-day forecast starting from today or a specific date."""
+@bot.command(name="read_weather")
+async def read_weather(ctx):
+    """Read today's and tomorrow's weather."""
     server_id = ctx.guild.id
-
-    if date:
-        try:
-            start_date = datetime.strptime(date, "%Y-%m-%d")
-        except ValueError:
-            await ctx.send("❌ Please use the format YYYY-MM-DD for the date.")
-            return
-    else:
-        start_date = datetime.now()
-
-    date_list = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
-
-    placeholders = ",".join("?" for _ in date_list)
-    query = f'''
+    now = datetime.now()
+    
+    # Get today and tomorrow's dates
+    today = now.strftime("%Y-%m-%d")
+    tomorrow = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+    
+    # Query the database for these two specific days
+    query = '''
         SELECT forecast_date, forecast_text
         FROM weather_forecast
-        WHERE server_id=? AND forecast_date IN ({placeholders})
+        WHERE server_id=? AND forecast_date IN (?, ?)
         ORDER BY forecast_date
     '''
-    result = db_execute(query, (server_id, *date_list), fetchall=True)
+    result = db_execute(query, (server_id, today, tomorrow), fetchall=True)
 
     if result:
         forecast_lines = [
             f"📅 **{format_golarion_date(datetime.strptime(row[0], '%Y-%m-%d'))}**\n{row[1]}"
             for row in result
         ]
-        await ctx.send(f"🌤 **7-Day Forecast**:\n\n" + "\n\n".join(forecast_lines))
-        logging.info(f"Retrieved forecast for server {server_id} with {len(result)} days of results")
+        await ctx.send(f"🌦️ **Current Weather Reading**:\n\n" + "\n\n".join(forecast_lines))
+        logging.info(f"Weather read by {ctx.author} on server {server_id}")
     else:
-        await ctx.send("⚠️ No forecast data found for the upcoming 7 days.")
-        logging.warning(f"No forecast found for server {server_id} for the requested dates.")
+        await ctx.send("⚠️ No current forecast available for today or tomorrow.")
+        logging.warning(f"No forecast found for server {server_id} for today/tomorrow.")
 
 @bot.command(name="ping") # Simple ping command to ensure bot is responsive.
 async def ping(ctx):
