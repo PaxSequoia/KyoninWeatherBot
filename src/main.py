@@ -125,37 +125,80 @@ class MainMenuView(View):
 
     @button(label="📖 Read Weather", style=discord.ButtonStyle.primary)
     async def read_weather_btn(self, interaction: discord.Interaction, button: Button):
-        # Create a context-like object with needed properties
-        class CtxLike:
-            def __init__(self, interaction):
-                self.guild = interaction.guild
-                self.author = interaction.user
-                self.send = interaction.response.send_message
-                
-        ctx_like = CtxLike(interaction)
-        await read_weather(ctx_like)
+        # Instead of calling the command directly, respond with the same logic
+        server_id = interaction.guild.id
+        now = datetime.now()
+        
+        # Get today and tomorrow's dates
+        today = now.strftime("%Y-%m-%d")
+        tomorrow = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+        
+        # Use DISTINCT to ensure we only get one entry per date
+        query = '''
+            SELECT DISTINCT forecast_date, forecast_text
+            FROM weather_forecast
+            WHERE server_id=? AND forecast_date IN (?, ?)
+            ORDER BY forecast_date
+        '''
+        result = db_execute(query, (server_id, today, tomorrow), fetchall=True)
+
+        if result:
+            forecast_lines = [
+                f"📅 **{format_golarion_date(datetime.strptime(row[0], '%Y-%m-%d'))}**\n{row[1]}"
+                for row in result
+            ]
+            await interaction.response.send_message(f"🌦️ **Current Weather Reading**:\n\n" + "\n\n".join(forecast_lines))
+        else:
+            await interaction.response.send_message("⚠️ No current forecast available for today or tomorrow.")
 
     @button(label="📅 7-Day Forecast", style=discord.ButtonStyle.primary)
     async def view_forecast_btn(self, interaction: discord.Interaction, button: Button):
-        class CtxLike:
-            def __init__(self, interaction):
-                self.guild = interaction.guild
-                self.author = interaction.user
-                self.send = interaction.response.send_message
-                
-        ctx_like = CtxLike(interaction)
-        await view_forecast(ctx_like)
+        server_id = interaction.guild.id
+        start_date = datetime.now()
+        
+        date_list = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
+
+        # Use DISTINCT to ensure we only get one entry per date
+        placeholders = ",".join("?" for _ in date_list)
+        query = f'''
+            SELECT DISTINCT forecast_date, forecast_text
+            FROM weather_forecast
+            WHERE server_id=? AND forecast_date IN ({placeholders})
+            ORDER BY forecast_date
+        '''
+        result = db_execute(query, (server_id, *date_list), fetchall=True)
+
+        if result:
+            forecast_lines = [
+                f"📅 **{format_golarion_date(datetime.strptime(row[0], '%Y-%m-%d'))}**\n{row[1]}"
+                for row in result
+            ]
+            await interaction.response.send_message(f"🌤 **7-Day Forecast**:\n\n" + "\n\n".join(forecast_lines))
+        else:
+            await interaction.response.send_message("⚠️ No forecast data found for the upcoming 7 days.")
 
     @button(label="🔮 Generate Forecast", style=discord.ButtonStyle.secondary)
     async def generate_forecast_btn(self, interaction: discord.Interaction, button: Button):
-        class CtxLike:
-            def __init__(self, interaction):
-                self.guild = interaction.guild
-                self.author = interaction.user
-                self.send = interaction.response.send_message
-                
-        ctx_like = CtxLike(interaction)
-        await generate_forecast(ctx_like)
+        # Check admin permissions
+        if not interaction.user.guild_permissions.administrator and not any(role.name.lower() == "admin" for role in interaction.user.roles):
+            await interaction.response.send_message("❌ You do not have permission to use this command.", ephemeral=True)
+            return
+            
+        server_id = interaction.guild.id
+        current_date = datetime.now()
+        season = "spring"  # You can determine the season based on the current date
+
+        for day in range(1, 8):  # Generate forecast for the next 7 days
+            forecast_date = (current_date + timedelta(days=day)).strftime("%Y-%m-%d")
+            forecast_text = generate_daily_forecast(season, "coastal")
+
+            # Insert the forecast into the database
+            db_execute(
+                '''INSERT INTO weather_forecast (server_id, forecast_date, forecast_text) VALUES (?, ?, ?)''',
+                (server_id, forecast_date, forecast_text)
+            )
+
+        await interaction.response.send_message("📅 One-week forecast generated.")
 
     @button(label="📌 Set Weather Channel", style=discord.ButtonStyle.success)
     async def set_channel_btn(self, interaction: discord.Interaction, button: Button):
@@ -163,14 +206,16 @@ class MainMenuView(View):
 
     @button(label="📺 Show Weather Channel", style=discord.ButtonStyle.success)
     async def show_channel_btn(self, interaction: discord.Interaction, button: Button):
-        class CtxLike:
-            def __init__(self, interaction):
-                self.guild = interaction.guild
-                self.author = interaction.user
-                self.send = interaction.response.send_message
-                
-        ctx_like = CtxLike(interaction)
-        await show_weather_channel(ctx_like)
+        # Check admin permissions
+        if not interaction.user.guild_permissions.administrator and not any(role.name.lower() == "admin" for role in interaction.user.roles):
+            await interaction.response.send_message("❌ You do not have permission to use this command.", ephemeral=True)
+            return
+            
+        result = db_execute('''SELECT weather_channel_id FROM server_settings WHERE server_id=?''', (interaction.guild.id,), fetchone=True)
+        if result and (channel := interaction.client.get_channel(result[0])):
+            await interaction.response.send_message(f"📌 Current weather channel: {channel.mention}")
+        else:
+            await interaction.response.send_message("❌ No weather channel set! Use `!set_weather_channel`")
 
     @button(label="🏓 Ping", style=discord.ButtonStyle.secondary)
     async def ping_btn(self, interaction: discord.Interaction, button: Button):
@@ -295,14 +340,21 @@ async def view_forecast(ctx, *, date: str = None):
 
     date_list = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
 
+    # Debug logging - check what dates we're querying
+    logging.info(f"Querying forecast for dates: {date_list}")
+
+    # Use DISTINCT to ensure we only get one entry per date
     placeholders = ",".join("?" for _ in date_list)
     query = f'''
-        SELECT forecast_date, forecast_text
+        SELECT DISTINCT forecast_date, forecast_text
         FROM weather_forecast
         WHERE server_id=? AND forecast_date IN ({placeholders})
         ORDER BY forecast_date
     '''
     result = db_execute(query, (server_id, *date_list), fetchall=True)
+
+    # Debug logging - check how many results we got
+    logging.info(f"Retrieved {len(result) if result else 0} forecast entries")
 
     if result:
         forecast_lines = [
@@ -337,14 +389,20 @@ async def read_weather(ctx):
     today = now.strftime("%Y-%m-%d")
     tomorrow = (now + timedelta(days=1)).strftime("%Y-%m-%d")
     
-    # Query the database for these two specific days
+    # Debug logging
+    logging.info(f"Reading weather for today ({today}) and tomorrow ({tomorrow})")
+    
+    # Use DISTINCT to ensure we only get one entry per date
     query = '''
-        SELECT forecast_date, forecast_text
+        SELECT DISTINCT forecast_date, forecast_text
         FROM weather_forecast
         WHERE server_id=? AND forecast_date IN (?, ?)
         ORDER BY forecast_date
     '''
     result = db_execute(query, (server_id, today, tomorrow), fetchall=True)
+    
+    # Debug logging
+    logging.info(f"Retrieved {len(result) if result else 0} weather entries")
 
     if result:
         forecast_lines = [
@@ -352,11 +410,10 @@ async def read_weather(ctx):
             for row in result
         ]
         await ctx.send(f"🌦️ **Current Weather Reading**:\n\n" + "\n\n".join(forecast_lines))
-        logging.info(f"Weather read by {ctx.author} on server {server_id}")
     else:
         await ctx.send("⚠️ No current forecast available for today or tomorrow.")
-        logging.warning(f"No forecast found for server {server_id} for today/tomorrow.")
 
+# Admin command to clean up duplicate entries
 @bot.command(name="cleanup_database")
 async def cleanup_database(ctx):
     """Admin command to clean up duplicate forecast entries."""
