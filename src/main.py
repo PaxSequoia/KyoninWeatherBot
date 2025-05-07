@@ -365,6 +365,58 @@ async def view_forecast(ctx, *, date: str = None):
     else:
         await ctx.send("⚠️ No forecast data found for the upcoming 7 days.")
 
+# Admin command to manually post today's weather update
+@bot.command(name="post_weather")
+async def post_weather(ctx):
+    """Admin command to manually post today's weather update."""
+    if not is_admin(ctx):
+        await ctx.send("❌ You do not have permission to use this command.")
+        return
+    
+    server_id = ctx.guild.id
+    
+    # Get the configured weather channel
+    result = db_execute(
+        '''SELECT weather_channel_id FROM server_settings WHERE server_id=?''',
+        (server_id,), fetchone=True
+    )
+    
+    if not result:
+        await ctx.send("❌ No weather channel has been configured. Use `!set_weather_channel` first.")
+        return
+        
+    channel_id = result[0]
+    channel = bot.get_channel(channel_id)
+    
+    if not channel:
+        await ctx.send(f"❌ Could not find the configured weather channel. Please use `!set_weather_channel` to set a new one.")
+        return
+    
+    # Get current time in Central timezone
+    central = pytz.timezone("US/Central")
+    now = datetime.now(central)
+    today_date = now.strftime("%Y-%m-%d")
+    golarion_date = format_golarion_date(now)
+    
+    # Get today's forecast
+    forecast = db_execute(
+        '''SELECT forecast_text FROM weather_forecast 
+           WHERE server_id=? AND forecast_date=?''',
+        (server_id, today_date), fetchone=True
+    )
+    
+    try:
+        if forecast:
+            await channel.send(f"📅 **Weather for {golarion_date}**\n{forecast[0]}")
+            await ctx.send(f"✅ Weather update for today has been posted to {channel.mention}")
+        else:
+            await ctx.send(f"⚠️ No forecast found for today ({today_date}). Generate a forecast first with `!generate_forecast`.")
+    except discord.errors.Forbidden:
+        await ctx.send(f"❌ Missing permissions to post in {channel.mention}.")
+    except Exception as e:
+        await ctx.send(f"❌ Error posting forecast: {str(e)}")
+        logging.error(f"Failed to manually post forecast: {e}")
+
 @bot.command(name="set_weather_reader_role")
 async def set_weather_reader_role(ctx, role: discord.Role):
     if not is_admin(ctx):
