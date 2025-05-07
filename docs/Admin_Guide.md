@@ -1,7 +1,7 @@
 # Kingdom of Kyonin Weather System
 ## User Guide - Version 1.0.3-secure
 
-![Weather System Banner](https://images.unsplash.com/photo-1595876245407-a92adbbf6e86?q=80&w=240)
+![Weather System Banner](https://i.pinimg.com/736x/3f/45/67/3f4567dd42c96fa41d23ae14d655f3b3.jpg)
 
 ## 📋 Table of Contents
 - [Introduction](#introduction)
