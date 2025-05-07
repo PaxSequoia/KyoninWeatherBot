@@ -230,7 +230,9 @@ class MainMenuView(View):
         central = pytz.timezone("US/Central")
         now = datetime.now(central)
         today_date = now.strftime("%Y-%m-%d")
-        golarion_date = format_golarion_date(now)
+        
+        # Get Golarion day name for today
+        golarion_day = GOLARION_DAYS[now.weekday()]
         
         # Get today's forecast
         forecast = db_execute(
@@ -241,7 +243,19 @@ class MainMenuView(View):
         
         try:
             if forecast:
-                await channel.send(f"📅 **Weather for {golarion_date}**\n{forecast[0]}")
+                # Parse the forecast text to get weather type and temperature
+                coastal_forecast = forecast[0]
+                
+                # Generate a different forecast for the forest region
+                forest_forecast = generate_daily_forecast("spring", "forest")
+                
+                # Format the message according to the preferred template
+                weather_message = f"\n**Daily Weather Report ({golarion_day})** \n"
+                weather_message += f"• Coastal Region: {coastal_forecast} \n"
+                weather_message += f"• Fiereni Forest: {forest_forecast} \n"
+                weather_message += "*May the winds favor your travels!*"
+                
+                await channel.send(weather_message)
                 await interaction.response.send_message(f"✅ Weather update for today has been manually posted to {channel.mention}")
             else:
                 await interaction.response.send_message(f"⚠️ No forecast found for today ({today_date}). Generate a forecast first!")
@@ -447,7 +461,9 @@ async def post_weather(ctx):
     central = pytz.timezone("US/Central")
     now = datetime.now(central)
     today_date = now.strftime("%Y-%m-%d")
-    golarion_date = format_golarion_date(now)
+    
+    # Get Golarion day name for today
+    golarion_day = GOLARION_DAYS[now.weekday()]
     
     # Get today's forecast
     forecast = db_execute(
@@ -458,7 +474,21 @@ async def post_weather(ctx):
     
     try:
         if forecast:
-            await channel.send(f"📅 **Weather for {golarion_date}**\n{forecast[0]}")
+            # Parse the forecast text to get weather type and temperature
+            # This assumes forecast_text is in format like "stormy and 75°F"
+            coastal_forecast = forecast[0]
+            
+            # Generate a different forecast for the forest region
+            # Slightly modify the original forecast for variety
+            forest_forecast = generate_daily_forecast("spring", "forest")
+            
+            # Format the message according to the preferred template
+            weather_message = f"\n**Daily Weather Report ({golarion_day})** \n"
+            weather_message += f"• Coastal Region: {coastal_forecast} \n"
+            weather_message += f"• Fiereni Forest: {forest_forecast} \n"
+            weather_message += "*May the winds favor your travels!*"
+            
+            await channel.send(weather_message)
             await ctx.send(f"✅ Weather update for today has been posted to {channel.mention}")
         else:
             await ctx.send(f"⚠️ No forecast found for today ({today_date}). Generate a forecast first with `!generate_forecast`.")
@@ -561,6 +591,7 @@ async def ping(ctx):
 
 # Daily weather posting task
 @tasks.loop(minutes=15)
+@tasks.loop(minutes=15)
 async def post_daily_weather():
     try:
         # Get current time in Central timezone
@@ -575,7 +606,9 @@ async def post_daily_weather():
             
             # Format today's date in SQL format
             today_date = now.strftime("%Y-%m-%d")
-            golarion_date = format_golarion_date(now)
+            
+            # Get Golarion day name for today
+            golarion_day = GOLARION_DAYS[now.weekday()]
             
             for guild in bot.guilds:
                 result = db_execute(
@@ -602,10 +635,22 @@ async def post_daily_weather():
                 
                 try:
                     if forecast:
-                        await channel.send(f"📅 **Weather for {golarion_date}**\n{forecast[0]}")
+                        # Parse the forecast text
+                        coastal_forecast = forecast[0]
+                        
+                        # Generate a different forecast for the forest region
+                        forest_forecast = generate_daily_forecast("spring", "forest")
+                        
+                        # Format the message according to the preferred template
+                        weather_message = f"\n**Daily Weather Report ({golarion_day})** \n"
+                        weather_message += f"• Coastal Region: {coastal_forecast} \n"
+                        weather_message += f"• Fiereni Forest: {forest_forecast} \n"
+                        weather_message += "*May the winds favor your travels!*"
+                        
+                        await channel.send(weather_message)
                         logging.info(f"Posted weather for {guild.name}")
                     else:
-                        await channel.send(f"📅 **Weather for {golarion_date}**\n⚠️ No forecast available.")
+                        await channel.send(f"\n**Daily Weather Report ({golarion_day})** \n⚠️ No forecast available.")
                         logging.warning(f"No forecast found for guild {guild.id} on {today_date}")
                 except discord.errors.Forbidden:
                     logging.error(f"Missing permissions to post in channel {channel.name} in guild {guild.name}")
