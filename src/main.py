@@ -459,41 +459,58 @@ async def ping(ctx):
 # Daily weather posting task
 @tasks.loop(minutes=15)
 async def post_daily_weather():
-    central = pytz.timezone("US/Central")
-    now = datetime.now(central)
-    logging.info(f"Current time: {now}")
-
-    def get_next_midnight_central():
-        """Calculate the next midnight in Central Time."""
+    try:
+        # Get current time in Central timezone
+        central = pytz.timezone("US/Central")
         now = datetime.now(central)
-        next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-        return next_midnight
+        logging.info(f"Current time: {now}")
 
-    target_time = get_next_midnight_central()
-    logging.info(f"Target time: {target_time}")
-
-    if now.replace(second=0, microsecond=0) == target_time.replace(second=0, microsecond=0):
-        for guild in bot.guilds:
-            result = db_execute(
-                '''SELECT weather_channel_id FROM server_settings WHERE server_id=?''',
-                (guild.id,), fetchone=True
-            )
-            if not result:
-                continue
-            channel = bot.get_channel(result[0])
-            if channel:
-                today = datetime.now().strftime("%A, %B %d")
-                forecast = db_execute(
-                    '''SELECT forecast_text FROM weather_forecast WHERE server_id=? AND forecast_date=date("now", "localtime")''',
+        # Check if it's between midnight and 15 minutes after
+        # This ensures we don't miss the window between function calls
+        if now.hour == 0 and now.minute < 15:
+            logging.info("Midnight window detected - posting daily weather")
+            
+            # Format today's date in SQL format
+            today_date = now.strftime("%Y-%m-%d")
+            golarion_date = format_golarion_date(now)
+            
+            for guild in bot.guilds:
+                result = db_execute(
+                    '''SELECT weather_channel_id FROM server_settings WHERE server_id=?''',
                     (guild.id,), fetchone=True
                 )
+                if not result:
+                    logging.info(f"No weather channel configured for guild {guild.id}")
+                    continue
+                    
+                channel_id = result[0]
+                channel = bot.get_channel(channel_id)
+                
+                if not channel:
+                    logging.warning(f"Could not find channel with ID {channel_id} for guild {guild.id}")
+                    continue
+                
+                # Get today's forecast using the explicit date
+                forecast = db_execute(
+                    '''SELECT forecast_text FROM weather_forecast 
+                       WHERE server_id=? AND forecast_date=?''',
+                    (guild.id, today_date), fetchone=True
+                )
+                
                 try:
                     if forecast:
-                        await channel.send(f"📅 **Weather for {today}**\n{forecast[0]}")
+                        await channel.send(f"📅 **Weather for {golarion_date}**\n{forecast[0]}")
+                        logging.info(f"Posted weather for {guild.name}")
                     else:
-                        await channel.send(f"📅 **Weather for {today}**\n⚠️ No forecast available.")
+                        await channel.send(f"📅 **Weather for {golarion_date}**\n⚠️ No forecast available.")
+                        logging.warning(f"No forecast found for guild {guild.id} on {today_date}")
+                except discord.errors.Forbidden:
+                    logging.error(f"Missing permissions to post in channel {channel.name} in guild {guild.name}")
                 except Exception as e:
                     logging.error(f"Failed to post forecast to {guild.name}: {e}")
+    except Exception as e:
+        logging.error(f"Error in post_daily_weather task: {e}")
+        # Don't let the task die - it will continue with the next scheduled run
 
 @bot.event
 async def on_ready():
