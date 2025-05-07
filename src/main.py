@@ -591,7 +591,6 @@ async def ping(ctx):
 
 # Daily weather posting task
 @tasks.loop(minutes=15)
-@tasks.loop(minutes=15)
 async def post_daily_weather():
     try:
         # Get current time in Central timezone
@@ -620,8 +619,7 @@ async def post_daily_weather():
                     continue
                     
                 channel_id = result[0]
-                channel = bot.get_channel(channel_id)
-                
+                channel = bot.get_channel(channel_id)                
                 if not channel:
                     logging.warning(f"Could not find channel with ID {channel_id} for guild {guild.id}")
                     continue
