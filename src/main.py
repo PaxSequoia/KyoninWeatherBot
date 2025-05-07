@@ -42,13 +42,13 @@ class CustomHelpCommand(commands.HelpCommand):
         self.bot = self.context.bot
         embed = discord.Embed(
             title="🌦️ Kingdom of Kyonin Weather System",
-            description="**Version 1.0.3-secure**\nComplete Command Reference",
+            description="**Version 1.0.4-secure**\nComplete Command Reference",
             color=0x3498db
         )
 
         categories = {
             "📌 Channel Management": ["set_weather_channel", "show_weather_channel"],
-            "🗕️ Forecast Control": ["generate_forecast", "view_forecast"],
+            "🗕️ Forecast Control": ["generate_forecast", "view_forecast", "post_weather"],
             "👥 Role Settings": ["set_weather_reader_role", "view_weather_reader_role"],
             "👁️ Preview": ["read_weather"],
             "⚙️ Utility": ["ping", "menu", "cleanup_database"]
@@ -199,6 +199,57 @@ class MainMenuView(View):
             )
 
         await interaction.response.send_message("📅 One-week forecast generated.")
+
+    @button(label="📤 Post Weather", style=discord.ButtonStyle.danger)
+    async def post_weather_btn(self, interaction: discord.Interaction, button: Button):
+        # Check admin permissions
+        if not interaction.user.guild_permissions.administrator and not any(role.name.lower() == "admin" for role in interaction.user.roles):
+            await interaction.response.send_message("❌ You do not have permission to use this command.", ephemeral=True)
+            return
+            
+        server_id = interaction.guild.id
+        
+        # Get the configured weather channel
+        result = db_execute(
+            '''SELECT weather_channel_id FROM server_settings WHERE server_id=?''',
+            (server_id,), fetchone=True
+        )
+        
+        if not result:
+            await interaction.response.send_message("❌ No weather channel has been configured. Use `!set_weather_channel` first.")
+            return
+            
+        channel_id = result[0]
+        channel = interaction.client.get_channel(channel_id)
+        
+        if not channel:
+            await interaction.response.send_message(f"❌ Could not find the configured weather channel. Please use `!set_weather_channel` to set a new one.")
+            return
+        
+        # Get current time in Central timezone
+        central = pytz.timezone("US/Central")
+        now = datetime.now(central)
+        today_date = now.strftime("%Y-%m-%d")
+        golarion_date = format_golarion_date(now)
+        
+        # Get today's forecast
+        forecast = db_execute(
+            '''SELECT forecast_text FROM weather_forecast 
+               WHERE server_id=? AND forecast_date=?''',
+            (server_id, today_date), fetchone=True
+        )
+        
+        try:
+            if forecast:
+                await channel.send(f"📅 **Weather for {golarion_date}**\n{forecast[0]}")
+                await interaction.response.send_message(f"✅ Weather update for today has been manually posted to {channel.mention}")
+            else:
+                await interaction.response.send_message(f"⚠️ No forecast found for today ({today_date}). Generate a forecast first!")
+        except discord.errors.Forbidden:
+            await interaction.response.send_message(f"❌ Missing permissions to post in {channel.mention}.")
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error posting forecast: {str(e)}")
+            logging.error(f"Failed to manually post forecast: {e}")
 
     @button(label="📌 Set Weather Channel", style=discord.ButtonStyle.success)
     async def set_channel_btn(self, interaction: discord.Interaction, button: Button):
