@@ -51,7 +51,7 @@ class CustomHelpCommand(commands.HelpCommand):
             "🗕️ Forecast Control": ["generate_forecast", "view_forecast", "post_weather"],
             "👥 Role Settings": ["set_weather_reader_role", "view_weather_reader_role"],
             "👁️ Preview": ["read_weather"],
-            "⚙️ Utility": ["ping", "menu", "cleanup_database"]
+            "⚙️ Utility": ["ping", "menu", "cleanup_database", "weather_help"]
         }
 
         for category, command_names in categories.items():
@@ -75,7 +75,7 @@ class CustomHelpCommand(commands.HelpCommand):
 bot = commands.Bot(
     command_prefix="!",
     intents=intents,
-    help_command=CustomHelpCommand()
+    help_command=None  # We'll register our help command manually
 )
 
 # Constants
@@ -292,6 +292,14 @@ class MainMenuView(View):
     @button(label="🏓 Ping", style=discord.ButtonStyle.secondary)
     async def ping_btn(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_message("🏓 Pong!", ephemeral=True)
+
+# Help command
+@bot.command(name="weather_help")
+async def weather_help(ctx):
+    """Show this help message."""
+    help_command = CustomHelpCommand()
+    help_command.context = await bot.get_context(ctx.message)
+    await help_command.send_bot_help(bot.all_commands)
 
 # Generate base weather
 def generate_base_weather(season, location):
