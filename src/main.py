@@ -101,8 +101,15 @@ def initialize_database():
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     server_id INTEGER NOT NULL,
                     forecast_date TEXT NOT NULL,
-                    forecast_text TEXT NOT NULL)''')
-
+                    forecast_text TEXT NOT NULL)''')\
+         # Create weekly_forecast_archive table
+        c.execute('''CREATE TABLE IF NOT EXISTS weekly_forecast_archive (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        server_id INTEGER NOT NULL,
+                        week_start_date TEXT NOT NULL,
+                        week_end_date TEXT NOT NULL,
+                        forecasts TEXT NOT NULL
+                    )''')
         conn.commit()
     logging.info("Database initialized successfully.")
 
@@ -321,9 +328,90 @@ def db_execute(query, params=(), fetchone=False, fetchall=False):
     except sqlite3.Error as e:
         logging.error(f"Database error: {e}")
         return None
+    
+# Archive weekly forecast
+def archive_weekly_forecast(server_id):
+    """Archive the current week's forecast for the server."""
+    today = datetime.now()
+    # Find the most recent Monday (start of week)
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+    week_dates = [(week_start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
 
+    placeholders = ",".join("?" for _ in week_dates)
+    query = f'''
+        SELECT forecast_date, forecast_text
+        FROM weather_forecast
+        WHERE server_id=? AND forecast_date IN ({placeholders})
+        ORDER BY forecast_date
+    '''
+    result = db_execute(query, (server_id, *week_dates), fetchall=True)
+    if result:
+        # Store as a simple joined string (could use JSON for more structure)
+        forecasts = "\n".join([f"{row[0]}: {row[1]}" for row in result])
+        db_execute(
+            '''INSERT INTO weekly_forecast_archive (server_id, week_start_date, week_end_date, forecasts)
+               VALUES (?, ?, ?, ?)''',
+            (server_id, week_start.strftime("%Y-%m-%d"), week_end.strftime("%Y-%m-%d"), forecasts)
+        )
+        logging.info(f"Archived weekly forecast for server {server_id} ({week_start} - {week_end})")
+        return True
+    return False
+
+# Check if the user is an admin
 def is_admin(ctx):
     return ctx.author.guild_permissions.administrator or any(role.name.lower() == "admin" for role in ctx.author.roles)
+
+# Admin Command to archive the weekly forecast
+@bot.command(name="archive_week")
+async def archive_week(ctx):
+    """Archive this week's forecast (admin only)."""
+    if not is_admin(ctx):
+        await ctx.send("❌ You do not have permission to use this command.")
+        return
+    success = archive_weekly_forecast(ctx.guild.id)
+    if success:
+        await ctx.send("📦 This week's forecast has been archived.")
+    else:
+        await ctx.send("⚠️ No forecast data found for this week to archive.")
+
+#Command to view archived forecasts
+@bot.command(name="historic_forecast")
+async def historic_forecast(ctx, week_start: str = None):
+    """
+    View archived weekly forecasts.
+    Usage: !historic_forecast [YYYY-MM-DD]
+    If no date is given, shows the most recent archive.
+    """
+    server_id = ctx.guild.id
+    if week_start:
+        try:
+            datetime.strptime(week_start, "%Y-%m-%d")
+        except ValueError:
+            await ctx.send("❌ Please use the format YYYY-MM-DD for the week start date.")
+            return
+        result = db_execute(
+            '''SELECT week_start_date, week_end_date, forecasts
+               FROM weekly_forecast_archive
+               WHERE server_id=? AND week_start_date=?
+               ORDER BY week_start_date DESC''',
+            (server_id, week_start), fetchone=True
+        )
+    else:
+        result = db_execute(
+            '''SELECT week_start_date, week_end_date, forecasts
+               FROM weekly_forecast_archive
+               WHERE server_id=?
+               ORDER BY week_start_date DESC LIMIT 1''',
+            (server_id,), fetchone=True
+        )
+    if result:
+        week_start, week_end, forecasts = result
+        await ctx.send(
+            f"📚 **Historic Forecast ({week_start} to {week_end})**\n\n{forecasts}"
+        )
+    else:
+        await ctx.send("⚠️ No archived forecast found for that week.")
 
 # Help commands
 @bot.command(name="menu") #Display menu buttons
@@ -358,6 +446,12 @@ async def generate_forecast(ctx):
         return
 
     server_id = ctx.guild.id
+
+    # Archive the current week's forecast before generating a new one
+    archived = archive_weekly_forecast(server_id)
+    if archived:
+        await ctx.send("📦 Previous week's forecast has been archived.")
+
     current_date = datetime.now()
     season = "spring"  # You can determine the season based on the current date
 
