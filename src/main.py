@@ -48,7 +48,10 @@ class CustomHelpCommand(commands.HelpCommand):
 
         categories = {
             "📌 Channel Management": ["set_weather_channel", "show_weather_channel"],
-            "🗕️ Forecast Control": ["generate_forecast", "view_forecast", "post_weather"],
+            "🗕️ Forecast Control": [
+                "generate_forecast", "view_forecast", "post_weather",
+                "archive_week", "historic_forecast"  # <-- Added archive commands here
+            ],
             "👥 Role Settings": ["set_weather_reader_role", "view_weather_reader_role"],
             "👁️ Preview": ["read_weather"],
             "⚙️ Utility": ["ping", "menu", "cleanup_database", "weather_help"]
