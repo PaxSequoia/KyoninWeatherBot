@@ -198,15 +198,16 @@ class MainMenuView(View):
         current_date = datetime.now()
         season = "spring"  # You can determine the season based on the current date
 
-        for day in range(1, 8):  # Generate forecast for the next 7 days
+        for day in range(0, 7):  # <-- Start from 0 to include today
             forecast_date = (current_date + timedelta(days=day)).strftime("%Y-%m-%d")
             forecast_text = generate_daily_forecast(season, "coastal")
 
-            # Insert the forecast into the database
             db_execute(
                 '''INSERT INTO weather_forecast (server_id, forecast_date, forecast_text) VALUES (?, ?, ?)''',
                 (server_id, forecast_date, forecast_text)
             )
+
+            logging.info(f"Generated forecast for server {server_id} on {forecast_date}: {forecast_text}")
 
         await interaction.response.send_message("📅 One-week forecast generated.")
 
@@ -466,17 +467,15 @@ async def generate_forecast(ctx):
     current_date = datetime.now()
     season = "spring"  # You can determine the season based on the current date
 
-    for day in range(1, 8):  # Generate forecast for the next 7 days
+    for day in range(0, 7):  # <-- Start from 0 to include today
         forecast_date = (current_date + timedelta(days=day)).strftime("%Y-%m-%d")
-        forecast_text = generate_daily_forecast(season, "coastal")  # You can change "coastal" to any location
+        forecast_text = generate_daily_forecast(season, "coastal")
 
-        # Insert the forecast into the database
         db_execute(
             '''INSERT INTO weather_forecast (server_id, forecast_date, forecast_text) VALUES (?, ?, ?)''',
             (server_id, forecast_date, forecast_text)
         )
 
-        # Log the inserted data
         logging.info(f"Generated forecast for server {server_id} on {forecast_date}: {forecast_text}")
 
     await ctx.send("📅 One-week forecast generated.")
