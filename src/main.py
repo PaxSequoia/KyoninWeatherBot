@@ -762,12 +762,41 @@ async def post_daily_weather():
         logging.error(f"Error in post_daily_weather task: {e}")
         # Don't let the task die - it will continue with the next scheduled run
 
+@tasks.loop(minutes=15)
+async def auto_generate_weekly_forecast():
+    try:
+        central = pytz.timezone("US/Central")
+        now = datetime.now(central)
+        # Only run once between midnight and 15 minutes after, and only on Monday
+        if now.weekday() == 0 and now.hour == 0 and now.minute < 15:
+            logging.info("Monday detected - auto-generating weekly forecasts")
+            for guild in bot.guilds:
+                server_id = guild.id
+                # Archive the previous week
+                archived = archive_weekly_forecast(server_id)
+                if archived:
+                    logging.info(f"Auto-archived previous week's forecast for server {server_id}")
+                # Generate new forecast for the week
+                season = "spring"  # You can make this dynamic if needed
+                for day in range(0, 7):
+                    forecast_date = (now + timedelta(days=day)).strftime("%Y-%m-%d")
+                    forecast_text = generate_daily_forecast(season, "coastal")
+                    db_execute(
+                        '''INSERT INTO weather_forecast (server_id, forecast_date, forecast_text) VALUES (?, ?, ?)''',
+                        (server_id, forecast_date, forecast_text)
+                    )
+                    logging.info(f"Auto-generated forecast for server {server_id} on {forecast_date}: {forecast_text}")
+    except Exception as e:
+        logging.error(f"Error in auto_generate_weekly_forecast task: {e}")
+
 @bot.event
 async def on_ready():
     logging.info(f'Logged in as {bot.user.name}')
     initialize_database()
     if not post_daily_weather.is_running():
         post_daily_weather.start()
+    if not auto_generate_weekly_forecast.is_running():
+        auto_generate_weekly_forecast.start()
 
 if TOKEN:
     bot.run(TOKEN)
